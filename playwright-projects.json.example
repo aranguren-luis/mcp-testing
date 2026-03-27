@@ -1,0 +1,16 @@
+{
+  "projects": [
+    {
+      "name": "Dashboard Toques",
+      "testDir": "tests/dashboard-toques",
+      "createdAt": "2026-03-26T00:00:00.000Z",
+      "testCount": 0
+    },
+    {
+      "name": "Mi Otro Proyecto",
+      "testDir": "tests/mi-otro-proyecto",
+      "createdAt": "2026-03-26T00:00:00.000Z",
+      "testCount": 0
+    }
+  ]
+}

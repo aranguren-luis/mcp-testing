@@ -1,0 +1,40 @@
+=====================================================================
+          GUÍA DE COMANDOS - PLAYWRIGHT & YOUTRACK INTEGRATION
+=====================================================================
+
+1. EJECUTAR PRUEBAS Y SUBIR A YOUTRACK (Comando Principal)
+---------------------------------------------------------
+Este comando corre todos los tests, genera el JSON y sube los issues 
+con capturas de pantalla y formato CP- a YouTrack.
+> npm run test:full
+
+2. GRABAR UN NUEVO TEST (Codegen)
+---------------------------------
+Abre el navegador para grabar tus acciones y las guarda en un archivo.
+> npx playwright codegen -o tests/nombre-del-test.spec.js
+
+3. EJECUTAR SOLO LOS TESTS (Sin subir a YouTrack)
+-------------------------------------------------
+Útil para depurar rápidamente.
+> npm test
+
+4. SUBIR RESULTADOS EXISTENTES A YOUTRACK
+-----------------------------------------
+Si ya corriste los tests y quieres subir el reporte 'test-results.json' actual.
+> npm run upload-results
+
+5. VER EL REPORTE VISUAL DE PLAYWRIGHT (HTML)
+---------------------------------------------
+Para ver detalles técnicos, trazas y videos localmente.
+> npx playwright show-report
+
+6. INSTALAR DEPENDENCIAS (En caso de error de módulos)
+------------------------------------------------------
+> npm install
+
+---------------------------------------------------------------------
+NOTAS IMPORTANTES:
+- Los tests deben estar en la carpeta: /tests
+- El contador de CP se guarda en: counter.json
+- Las credenciales de YouTrack están en: .env
+=====================================================================
