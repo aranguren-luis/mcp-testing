@@ -1,0 +1,16 @@
+{
+  "name": "gestor-qa",
+  "version": "1.0.0",
+  "description": "Sistema de Reporte QA y Gestión de Casos de Prueba",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "keywords": ["qa", "testing", "playwright"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}

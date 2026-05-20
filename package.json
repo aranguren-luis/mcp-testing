@@ -7,7 +7,7 @@
     "test": "playwright test",
     "codegen": "playwright codegen",
     "upload-results": "node upload-to-youtrack.js",
-    "test:full": "npm test & npm run upload-results"
+    "test:full": "playwright test && node upload-to-youtrack.js"
   },
   "keywords": [],
   "author": "",

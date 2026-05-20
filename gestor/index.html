@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Reporte QA y Gestión de Casos de Prueba</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="css/styles.css">
+    <!-- Dexie.js para IndexedDB -->
+    <script src="https://unpkg.com/dexie@4.0.8/dist/dexie.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Chart.js para gráficos -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <!-- SortableJS para drag & drop -->
+    <script src="https://cdn.jsdelivr.net/npm/sortablejs@latest/Sortable.min.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- HEADER SIMPLIFICADO -->
+        <header>
+            <div class="header-right">
+                <div class="project-selector">
+                    <label for="currentProject">Proyecto:</label>
+                    <select id="currentProject"></select>
+                </div>
+                <div class="project-buttons">
+                    <button class="project-btn" id="manageProjectsBtn" title="Gestionar proyectos"><i class="fas fa-cog"></i></button>
+                    <button class="project-btn" id="exportProjectBtn" title="Exportar proyecto"><i class="fas fa-download"></i></button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="main-nav">
+            <button class="nav-tab active" data-tab="bug-report"><i class="fas fa-bug"></i> Reportar Bugs</button>
+            <button class="nav-tab" data-tab="test-cases"><i class="fas fa-vial"></i> Casos de Prueba</button>
+            <button class="nav-tab" data-tab="predefined-steps"><i class="fas fa-boxes"></i> Pasos Predefinidos</button>
+            <button class="nav-tab" data-tab="projects-management"><i class="fas fa-tasks"></i> Gestión de Proyectos</button>
+            <button class="nav-tab" data-tab="playwright-tests"><i class="fab fa-playwright"></i> Playwright</button>
+        </nav>
+
+        <!-- SECCIÓN REPORTE DE BUGS -->
+        <div id="bug-report" class="tab-content-section active">
+            <div id="storageWarning" class="storage-warning" style="display: none;">
+                <i class="fas fa-exclamation-triangle"></i>
+                <div><strong>Advertencia de almacenamiento:</strong> El almacenamiento local está casi lleno. Considera exportar y limpiar datos antiguos o usar la gestión por proyectos.</div>
+            </div>
+            <div class="main-content">
+                <div class="form-section">
+                    <div class="form-tabs">
+                        <button class="form-tab active" data-tab="tab-basic">Información Básica</button>
+                        <button class="form-tab" data-tab="tab-details">Detalles del Error</button>
+                        <button class="form-tab" data-tab="tab-environment">Entorno</button>
+                    </div>
+                    <div id="editingIndicator" class="editing-indicator" style="display: none;">
+                        <i class="fas fa-edit"></i> <span>Estás editando el reporte <strong id="editingBugId"></strong></span>
+                    </div>
+                    <form id="bugForm">
+                        <input type="hidden" id="editingBugIdField" value="">
+                        <div id="tab-basic" class="tab-content active">
+                            <div class="form-group"><label for="bugTitle" class="required">Título del Error</label><input type="text" id="bugTitle" required placeholder="Ej: No carga la página de inicio"></div>
+                            <div class="form-row">
+                                <div class="form-group"><label for="bugCategory" class="required">Categoría</label>
+                                    <select id="bugCategory" required>
+                                        <option value="">Seleccionar categoría</option>
+                                        <option value="Bug (fallo)">Bug (fallo)</option>
+                                        <option value="Test Case (caso de éxito)">Test Case (caso de éxito)</option>
+                                        <option value="Exploratorio">Exploratorio</option>
+                                        <option value="Mejora">Mejora</option>
+                                    </select>
+                                </div>
+                                <div class="form-group"><label for="bugFrequency" class="required">Frecuencia</label>
+                                    <select id="bugFrequency" required>
+                                        <option value="">Seleccionar frecuencia</option>
+                                        <option value="Siempre">Siempre</option>
+                                        <option value="A veces">A veces</option>
+                                        <option value="Raramente">Raramente</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label for="bugStatus">Estado</label>
+                                    <select id="bugStatus">
+                                        <option value="Nuevo">Nuevo</option>
+                                        <option value="Asignado">Asignado</option>
+                                        <option value="Resuelto">Resuelto</option>
+                                        <option value="Cerrado">Cerrado</option>
+                                    </select>
+                                </div>
+                                <div class="form-group">
+                                    <label for="bugFollowUp">Seguimiento</label>
+                                    <div style="display: flex; align-items: center; gap: 10px; margin-top: 8px;">
+                                        <input type="checkbox" id="bugFollowUp" style="width: auto;">
+                                        <label for="bugFollowUp" style="display: inline; margin: 0;">Activar seguimiento (recordatorio si no se actualiza en 7 días)</label>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label>Evidencia (imágenes - máximo 5) <span class="shortcut-hint">(Ctrl+V para pegar)</span></label>
+                                <div class="image-upload-area" id="imageUploadArea">
+                                    <i class="fas fa-cloud-upload-alt"></i>
+                                    <p>Haz clic para seleccionar imágenes</p>
+                                    <span>o arrastra y suelta aquí (o pega con Ctrl+V)</span>
+                                    <input type="file" id="imageInput" accept="image/*" multiple style="display: none;">
+                                </div>
+                                <div id="imagePreviewContainer"></div>
+                            </div>
+                        </div>
+                        <div id="tab-details" class="tab-content">
+                            <div class="form-group steps-with-integration">
+                                <label for="bugSteps" class="required">Pasos para Reproducir</label>
+                                <button type="button" class="use-test-case-btn" id="useTestCaseBtn"><i class="fas fa-vial"></i> Usar Caso de Prueba</button>
+                                <textarea id="bugSteps" required></textarea>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label for="bugExpected" class="required">Resultado Esperado</label><textarea id="bugExpected" required></textarea></div>
+                                <div class="form-group"><label for="bugActual" class="required">Resultado Actual</label><textarea id="bugActual" required></textarea></div>
+                            </div>
+                            <div class="form-group"><label for="bugNotes">Notas Adicionales</label><textarea id="bugNotes"></textarea></div>
+                        </div>
+                        <div id="tab-environment" class="tab-content">
+                            <div class="form-row">
+                                <div class="form-group"><label for="bugVersion" class="required">Versión</label>
+                                    <select id="bugVersion" required>
+                                        <option value="">Seleccionar versión</option>
+                                        <option value="__new__">➕ Agregar nuevo...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group"><label for="bugOS" class="required">Sistema Operativo</label>
+                                    <select id="bugOS" required>
+                                        <option value="">Seleccionar SO</option>
+                                        <option value="__new__">➕ Agregar nuevo...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label for="bugBrowser" class="required">Navegador</label>
+                                    <select id="bugBrowser" required>
+                                        <option value="">Seleccionar navegador</option>
+                                        <option value="__new__">➕ Agregar nuevo...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group"><label for="bugEnv" class="required">Entorno</label>
+                                    <select id="bugEnv" required>
+                                        <option value="Testing">Testing</option>
+                                        <option value="Producción">Producción</option>
+                                        <option value="Desarrollo">Desarrollo</option>
+                                        <option value="Staging">Staging</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-row">
+                                <div class="form-group"><label for="bugResolution">Resolución de Pantalla</label>
+                                    <select id="bugResolution">
+                                        <option value="">Seleccionar resolución</option>
+                                        <option value="__new__">➕ Agregar nuevo...</option>
+                                    </select>
+                                </div>
+                                <div class="form-group"><label for="bugDevice">Dispositivo</label>
+                                    <select id="bugDevice">
+                                        <option value="">Seleccionar dispositivo</option>
+                                        <option value="__new__">➕ Agregar nuevo...</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="form-group"><label for="bugBuild">Build (para testing móvil)</label>
+                                <select id="bugBuild">
+                                    <option value="">Seleccionar build</option>
+                                    <option value="__new__">➕ Agregar nuevo...</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="button-group">
+                            <button type="submit" class="btn-primary" id="submitBugBtn"><i class="fas fa-plus-circle"></i> Crear Reporte <span class="shortcut-hint">(Ctrl+Mayús+S)</span></button>
+                            <button type="button" id="cancelEdit" class="btn-secondary" style="display: none;"><i class="fas fa-times"></i> Cancelar Edición</button>
+                            <button type="button" id="clearForm" class="btn-secondary"><i class="fas fa-eraser"></i> Limpiar Formulario <span class="shortcut-hint">(Ctrl+N)</span></button>
+                        </div>
+                    </form>
+                    <div class="bug-count"><i class="fas fa-bug"></i> <span id="totalBugs">0</span> errores reportados</div>
+                    <div class="storage-info"><i class="fas fa-database"></i> <div><strong>Información de almacenamiento:</strong> <div id="storageStatus">Cargando...</div></div></div>
+                </div>
+                <div class="preview-section">
+                    <div class="section-title"><i class="fas fa-eye"></i><h3>Vista Previa de Reportes</h3></div>
+                    <div id="previewContainer">
+                        <div class="empty-state" id="emptyState"><i class="fas fa-clipboard-list"></i><h3>No hay errores reportados</h3><p>Comienza creando un reporte usando el formulario a la izquierda.</p></div>
+                        <div id="bugsPreview" style="display: none;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN CASOS DE PRUEBA -->
+        <div id="test-cases" class="tab-content-section">
+            <div class="section-title"><i class="fas fa-vial"></i><h3>Gestión de Casos de Prueba</h3></div>
+            <div class="test-case-form-tabs">
+                <button class="test-case-form-tab active" data-tab="create-test-case">Crear / Editar Caso</button>
+                <button class="test-case-form-tab" data-tab="view-test-cases">Ver Casos</button>
+            </div>
+            <div id="create-test-case" class="test-case-tab-content active">
+                <div id="testCaseEditingIndicator" class="editing-indicator" style="display: none;">
+                    <i class="fas fa-edit"></i> <span>Estás editando el caso <strong id="editingTestCaseId"></strong></span>
+                </div>
+                <form id="testCaseForm">
+                    <div class="form-row">
+                        <div class="form-group"><label for="testCaseId" class="required">ID del Caso</label><input type="text" id="testCaseId" required></div>
+                        <div class="form-group"><label for="testCaseStatus" class="required">Estado</label>
+                            <select id="testCaseStatus" required>
+                                <option value="Not Executed">No Ejecutado</option>
+                                <option value="Passed">Pasado</option>
+                                <option value="Failed">Fallado</option>
+                                <option value="Blocked">Bloqueado</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group"><label for="testCaseTitle" class="required">Título</label><input type="text" id="testCaseTitle" required></div>
+                    <div class="form-group"><label for="testCasePreconditions">Precondiciones</label><textarea id="testCasePreconditions"></textarea></div>
+                    <div class="form-group">
+                        <label class="required">Pasos de Prueba</label>
+                        <div class="button-group" style="margin-top:5px;">
+                            <button type="button" class="btn-secondary" id="addPredefinedStepBtn"><i class="fas fa-plus"></i> Usar Paso Predefinido</button>
+                            <button type="button" class="btn-secondary" id="addCustomStepBtn"><i class="fas fa-edit"></i> Agregar Paso Personalizado</button>
+                        </div>
+                        <div id="testCaseStepsContainer" class="steps-list" style="margin-top:10px;"></div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group"><label for="testCaseExpected" class="required">Resultado Esperado General</label><textarea id="testCaseExpected" required></textarea></div>
+                        <div class="form-group"><label for="testCaseActual">Resultado Obtenido</label><textarea id="testCaseActual"></textarea></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Adjunto (imagen)</label>
+                        <div class="image-upload-area" id="testCaseImageUploadArea">
+                            <i class="fas fa-cloud-upload-alt"></i>
+                            <p>Haz clic para seleccionar una imagen</p>
+                            <span>o arrastra y suelta aquí</span>
+                            <input type="file" id="testCaseImageInput" accept="image/*" style="display: none;">
+                        </div>
+                        <div id="testCaseImagePreviewContainer"></div>
+                    </div>
+                    <div class="button-group">
+                        <button type="submit" class="btn-success" id="submitTestCaseBtn"><i class="fas fa-save"></i> Guardar Caso de Prueba</button>
+                        <button type="button" id="cancelTestCaseEdit" class="btn-secondary" style="display: none;"><i class="fas fa-times"></i> Cancelar Edición</button>
+                        <button type="button" id="clearTestCaseForm" class="btn-secondary"><i class="fas fa-eraser"></i> Limpiar</button>
+                    </div>
+                </form>
+            </div>
+            <div id="view-test-cases" class="test-case-tab-content">
+                <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 20px;">
+                    <input type="text" id="searchTestCases" placeholder="Buscar casos por ID, título, pasos..." style="flex: 1;">
+                    <button id="exportTestCasesPDFBtn" class="btn-primary" style="padding: 10px 16px; white-space: nowrap;">
+                        <i class="fas fa-file-pdf"></i> Exportar a PDF
+                    </button>
+                </div>
+                <div id="testCasesTableContainer" class="test-cases-table-container"></div>
+                <div id="emptyTestCasesState" class="empty-state" style="display: none;">
+                    <i class="fas fa-file-alt"></i><h3>No hay casos de prueba guardados</h3><p>Crea tu primer caso usando la pestaña "Crear / Editar Caso"</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN PASOS PREDEFINIDOS -->
+        <div id="predefined-steps" class="tab-content-section">
+            <div class="section-title"><i class="fas fa-boxes"></i><h3>Biblioteca de Pasos Predefinidos</h3></div>
+            <div class="form-group"><label for="newStepDescription" class="required">Descripción del Paso</label><textarea id="newStepDescription" placeholder="Ej: 1. Iniciar sesión con credenciales válidas"></textarea></div>
+            <div class="form-group">
+                <label for="newStepCategory">Categoría</label>
+                <div style="display: flex; gap: 10px;">
+                    <select id="newStepCategory" style="flex:1;"><option value="">Seleccionar categoría</option></select>
+                    <input type="text" id="newCategoryInput" placeholder="Nueva categoría" style="flex:1; display:none;">
+                    <button type="button" class="btn-primary" id="addCategoryBtn" style="padding:8px 12px;"><i class="fas fa-plus"></i> Nueva</button>
+                </div>
+            </div>
+            <button class="btn-primary" id="savePredefinedStep"><i class="fas fa-save"></i> Guardar Paso Predefinido</button>
+            <div class="categories-management">
+                <h4 style="margin-bottom:10px; color:#2c3e50;">Gestión de Categorías</h4>
+                <div class="form-group"><div style="display:flex; gap:10px;"><input type="text" id="createCategoryInput" placeholder="Nombre de nueva categoría" style="flex:1;"><button type="button" class="btn-success" id="createCategoryBtn" style="padding:8px 12px;"><i class="fas fa-plus-circle"></i> Crear</button></div></div>
+                <div id="categoriesListContainer"></div>
+            </div>
+            <div class="form-group" style="margin-top:30px;"><input type="text" id="searchSteps" placeholder="Buscar pasos por descripción o categoría..."></div>
+            <div id="predefinedStepsList" class="predefined-steps-container" style="max-height:400px;"></div>
+        </div>
+
+        <!-- SECCIÓN PLAYWRIGHT TESTS -->
+        <div id="playwright-tests" class="tab-content-section">
+            <div class="section-title"><i class="fab fa-playwright"></i><h3>Playwright - Ejecución de Tests</h3></div>
+            <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
+                <button class="btn-success" id="recordTestBtn"><i class="fas fa-record"></i> Grabar Test Case</button>
+                <button class="btn-primary" id="runAllTestsBtn"><i class="fas fa-play"></i> Ejecutar Tests</button>
+                <button class="btn-warning" id="importResultsBtn"><i class="fas fa-file-import"></i> Importar Resultados</button>
+                <button class="btn-secondary" id="refreshTestsBtn"><i class="fas fa-sync"></i> Refrescar</button>
+            </div>
+            <div class="form-group">
+                <label for="playwrightProjectFilter">Filtrar por Proyecto:</label>
+                <select id="playwrightProjectFilter" style="max-width: 300px;">
+                    <option value="">Todos los proyectos</option>
+                </select>
+            </div>
+            <div class="stats-container">
+                <div class="chart-card">
+                    <h4><i class="fas fa-chart-pie" style="color:#3498db;"></i> Última Ejecución</h4>
+                    <div id="lastRunStats" style="text-align: center; padding: 20px;">
+                        <p style="color: #7f8c8d;">Sin ejecuciones registradas</p>
+                    </div>
+                </div>
+            </div>
+            <div class="test-cases-table-container">
+                <table class="test-cases-table" id="playwrightTestsTable">
+                    <thead>
+                        <tr>
+                            <th>Test File</th>
+                            <th>Proyecto</th>
+                            <th>Última Ejecución</th>
+                            <th>Estado</th>
+                            <th>Duración</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="playwrightTestsBody">
+                        <tr><td colspan="6" style="text-align: center; color: #7f8c8d;">Cargando tests...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="section-title" style="margin-top: 30px;"><i class="fas fa-history"></i><h3>Historial de Ejecuciones</h3></div>
+            <div id="executionHistory" class="test-cases-table-container">
+                <table class="test-cases-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Test</th>
+                            <th>Estado</th>
+                            <th>Duración</th>
+                            <th>Errores</th>
+                        </tr>
+                    </thead>
+                    <tbody id="executionHistoryBody">
+                        <tr><td colspan="5" style="text-align: center; color: #7f8c8d;">Sin historial de ejecuciones</td></tr>
+                    </tbody>
+                </table>
+            </div>
+            <div class="storage-info" style="margin-top: 20px;">
+                <i class="fas fa-info-circle"></i>
+                <div>
+                    <strong>Uso:</strong> Los resultados de Playwright se importan desde <code>test-results-db.json</code>.
+                    Para ejecutar tests, usa <code>node playwright-to-db.js run</code> o haz clic en "Ejecutar Todos".
+                </div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN GESTIÓN DE PROYECTOS -->
+        <div id="projects-management" class="tab-content-section">
+            <div class="section-title"><i class="fas fa-tasks"></i><h3>Gestión de Proyectos</h3></div>
+            <div class="stats-container">
+                <div class="chart-card">
+                    <h4><i class="fas fa-chart-pie" style="color:#3498db;"></i> Bugs por Estado</h4>
+                    <canvas id="chartBugsByStatus"></canvas>
+                </div>
+                <div class="chart-card">
+                    <h4><i class="fas fa-chart-pie" style="color:#27ae60;"></i> Bugs por Categoría</h4>
+                    <canvas id="chartBugsByCategory"></canvas>
+                </div>
+            </div>
+            <div class="projects-management">
+                <div class="form-group"><label for="projectName" class="required">Nombre del Proyecto</label><input type="text" id="projectName" placeholder="Ej: Proyecto E-Commerce"></div>
+                <div class="form-group"><label for="projectDescription">Descripción</label><textarea id="projectDescription" placeholder="Descripción del proyecto..."></textarea></div>
+                <div class="form-group"><label for="projectColor">Color del Proyecto</label><input type="color" id="projectColor" value="#3498db"></div>
+                <div class="button-group">
+                    <button type="button" class="btn-success" id="createProjectBtn"><i class="fas fa-plus-circle"></i> Crear Proyecto</button>
+                    <button type="button" class="btn-secondary" id="clearProjectFormBtn"><i class="fas fa-eraser"></i> Limpiar</button>
+                </div>
+            </div>
+            <div class="section-title" style="margin-top:30px;"><i class="fas fa-list"></i><h3>Lista de Proyectos</h3></div>
+            <div id="projectsList" class="projects-grid"></div>
+            <div id="emptyProjectsState" class="empty-state"><i class="fas fa-folder-open"></i><h3>No hay proyectos creados</h3><p>Crea tu primer proyecto usando el formulario anterior</p></div>
+            <div class="section-title" style="margin-top:30px;"><i class="fas fa-database"></i><h3>Gestión de Datos</h3></div>
+            <div class="action-buttons">
+                <button type="button" id="exportAllData" class="btn-primary"><i class="fas fa-download"></i> Exportar Todos los Datos</button>
+                <button type="button" id="importData" class="btn-warning"><i class="fas fa-upload"></i> Importar Datos</button>
+                <button type="button" id="clearOldData" class="btn-danger"><i class="fas fa-trash"></i> Limpiar Datos Antiguos</button>
+            </div>
+            <div class="storage-info" style="margin-top:20px;"><i class="fas fa-info-circle"></i><div><strong>Consejos para gestionar el almacenamiento:</strong><ul style="margin-top:5px; padding-left:20px;"><li>Usa proyectos separados para organizar tus reportes</li><li>Exporta y elimina proyectos que ya no necesites</li><li>El límite de almacenamiento local es de aproximadamente 5-10MB</li><li>Considera exportar datos antiguos periódicamente</li></ul></div></div>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="app-footer">
+            <div class="section-title" style="margin:0 0 15px 0;"><i class="fas fa-file-pdf"></i><h3>Generar Informe PDF</h3></div>
+            <div class="form-row">
+                <div class="form-group"><label for="reportTitle">Título del Informe</label><input type="text" id="reportTitle" value="Reporte de Aseguramiento de Calidad (QA)"></div>
+                <div class="form-group"><label for="reportSubtitle">Subtítulo</label><input type="text" id="reportSubtitle" value="Luis Aranguren"></div>
+            </div>
+            <div class="form-row"><div class="form-group"><label for="reportDate">Fecha del Informe</label><input type="text" id="reportDate" value=""></div></div>
+            <div class="form-row"><div class="form-group"><label for="reportFilter">Filtrar por Estado</label><select id="reportFilter"><option value="todos">Todos los estados</option><option value="Nuevo">Solo Nuevos</option><option value="Asignado">Solo Asignados</option><option value="Resuelto">Solo Resueltos</option><option value="Cerrado">Solo Cerrados</option></select></div></div>
+            <div class="action-buttons">
+                <button type="button" id="generatePDF" class="btn-success"><i class="fas fa-file-pdf"></i> Generar PDF Completo</button>
+                <button type="button" id="clearAll" class="btn-danger"><i class="fas fa-trash-alt"></i> Limpiar Todos los Reportes</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODALES -->
+    <div class="modal" id="testCaseModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2 class="section-title" style="margin:0 0 20px 0;"><i class="fas fa-vial"></i><h3>Seleccionar Caso de Prueba</h3></h2>
+            <div class="modal-tabs">
+                <div class="modal-tab active" data-tab="tab-test-cases">Casos de Prueba</div>
+                <div class="modal-tab" data-tab="tab-predefined-steps">Pasos Predefinidos</div>
+            </div>
+            <div id="tab-test-cases" class="modal-tab-content active">
+                <div class="form-group"><input type="text" id="modalSearchTestCases" placeholder="Buscar casos de prueba..."></div>
+                <div id="modalTestCasesList"></div>
+            </div>
+            <div id="tab-predefined-steps" class="modal-tab-content">
+                <div class="form-group"><input type="text" id="modalSearchSteps" placeholder="Buscar pasos predefinidos..."></div>
+                <div id="modalPredefinedStepsList"></div>
+            </div>
+            <div class="button-group" style="margin-top:20px;">
+                <button type="button" class="btn-primary" id="selectTestCaseBtn"><i class="fas fa-check"></i> Usar Seleccionados</button>
+                <button type="button" class="btn-secondary" id="closeModalBtn"><i class="fas fa-times"></i> Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="customStepModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <h2 class="section-title" style="margin:0 0 20px 0;"><i class="fas fa-edit"></i><h3>Agregar / Editar Paso</h3></h2>
+            <input type="hidden" id="editingStepIndex" value="-1">
+            <div class="form-group"><label for="customStepDescription" class="required">Descripción del Paso</label><textarea id="customStepDescription" placeholder="Ej: Ingresar usuario y contraseña" required></textarea></div>
+            <div class="form-group"><label for="customStepExpected">Resultado Esperado (opcional)</label><textarea id="customStepExpected" placeholder="Ej: El sistema muestra la página principal"></textarea></div>
+            <div class="form-group"><label for="customStepData">Datos de Prueba (opcional)</label><textarea id="customStepData" placeholder="Ej: usuario: admin, pass: 1234"></textarea></div>
+            <div class="form-group"><label for="saveAsPredefined"><input type="checkbox" id="saveAsPredefined"> Guardar como paso predefinido para uso futuro</label></div>
+            <div class="form-group" id="customStepCategoryContainer" style="display:none;">
+                <label for="customStepCategory">Categoría</label>
+                <div style="display:flex; gap:10px;">
+                    <select id="customStepCategory" style="flex:1;"><option value="">Seleccionar categoría</option></select>
+                    <button type="button" class="btn-primary" id="addCategoryBtnModal" style="padding:8px 12px;"><i class="fas fa-plus"></i> Nueva</button>
+                </div>
+            </div>
+            <div class="button-group">
+                <button type="button" class="btn-primary" id="addCustomStepBtnModal"><i class="fas fa-plus"></i> Agregar / Actualizar Paso</button>
+                <button type="button" class="btn-secondary" id="closeCustomStepModalBtn"><i class="fas fa-times"></i> Cancelar</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="imageModal">
+        <div class="modal-content">
+            <span class="close-modal">&times;</span>
+            <img id="modalImage" src="" alt="Imagen ampliada" style="max-width:100%; max-height:80vh;">
+        </div>
+    </div>
+
+    <div class="modal" id="recordTestModal">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close-modal" id="closeRecordModalBtn">&times;</span>
+            <h2 class="section-title" style="margin:0 0 20px 0;"><i class="fas fa-record"></i><h3>Grabar Nuevo Test Case</h3></h2>
+            <div class="form-group">
+                <label for="recordProject" class="required">Proyecto</label>
+                <select id="recordProject">
+                    <option value="">Seleccionar proyecto...</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label for="recordTestName" class="required">Nombre del Test</label>
+                <input type="text" id="recordTestName" placeholder="Ej: login-flujo-exitoso">
+            </div>
+            <div class="form-group">
+                <label for="recordUrl" class="required">URL a Probar</label>
+                <input type="url" id="recordUrl" placeholder="https://mi-app.com/login">
+            </div>
+            <div class="form-group">
+                <label for="recordOutputPath">Ruta de guardado</label>
+                <input type="text" id="recordOutputPath" placeholder="tests/proyecto/test.spec.js" readonly style="background-color: #f0f0f0;">
+                <small style="color:#7f8c8d;">El archivo se guardará en esta ubicación</small>
+            </div>
+            <div class="storage-info" style="margin: 15px 0;">
+                <i class="fas fa-terminal"></i>
+                <div>
+                    <strong>Cómo grabar:</strong><br>
+                    1. Haz clic en "Generar Comando"<br>
+                    2. Copia el comando que aparece abajo<br>
+                    3. Pégalo en una terminal y presiona Enter<br>
+                    4. Se abrirá Playwright Codegen en tu navegador<br>
+                    5. Interactúa con la página y cierra el navegador al terminar<br>
+                    6. El archivo .spec.js se guardará automáticamente
+                </div>
+            </div>
+            <div id="recordCommandBox" style="display:none; margin: 15px 0;">
+                <label>Comando a ejecutar:</label>
+                <div style="background-color: #2c3e50; color: #00ff00; padding: 15px; border-radius: 6px; font-family: monospace; word-break: break-all; margin-top: 5px; position: relative;">
+                    <code id="recordCommandText"></code>
+                    <button type="button" onclick="copyRecordCommand()" style="position: absolute; top: 10px; right: 10px; background: #3498db; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                        <i class="fas fa-copy"></i> Copiar
+                    </button>
+                </div>
+            </div>
+            <div class="button-group">
+                <button type="button" class="btn-success" id="generateCommandBtn"><i class="fas fa-terminal"></i> Generar Comando</button>
+                <button type="button" class="btn-secondary" id="cancelRecordModalBtn"><i class="fas fa-times"></i> Cerrar</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js"></script>
+</body>
+</html>

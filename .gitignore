@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Playwright
+test-results/
+test-results.json
+trace.zip
+playwright-report/
+
+# Screenshots
+*.png
+*.jpg
+
+# Config local (puede contener secrets)
+.env
+config.json
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Export files
+test-results-db.json

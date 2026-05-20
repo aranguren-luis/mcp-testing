@@ -482,7 +482,8 @@
 
             <!-- Acciones rápidas -->
             <div style="display: flex; gap: 10px; margin-bottom: 20px; flex-wrap: wrap;">
-                <button class="btn-primary" id="runAllTestsBtn"><i class="fas fa-play"></i> Ejecutar Todos los Tests</button>
+                <button class="btn-success" id="recordTestBtn"><i class="fas fa-record"></i> Grabar Test Case</button>
+                <button class="btn-primary" id="runAllTestsBtn"><i class="fas fa-play"></i> Ejecutar Tests</button>
                 <button class="btn-warning" id="importResultsBtn"><i class="fas fa-file-import"></i> Importar Resultados</button>
                 <button class="btn-secondary" id="refreshTestsBtn"><i class="fas fa-sync"></i> Refrescar</button>
             </div>
@@ -657,6 +658,65 @@
         <div class="modal-content">
             <span class="close-modal">&times;</span>
             <img id="modalImage" src="" alt="Imagen ampliada" style="max-width:100%; max-height:80vh;">
+        </div>
+    </div>
+
+    <!-- MODAL PARA GRABAR TEST CASE -->
+    <div class="modal" id="recordTestModal">
+        <div class="modal-content" style="max-width: 600px;">
+            <span class="close-modal" id="closeRecordModalBtn">&times;</span>
+            <h2 class="section-title" style="margin:0 0 20px 0;"><i class="fas fa-record"></i><h3>Grabar Nuevo Test Case</h3></h2>
+
+            <div class="form-group">
+                <label for="recordProject" class="required">Proyecto</label>
+                <select id="recordProject">
+                    <option value="">Seleccionar proyecto...</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="recordTestName" class="required">Nombre del Test</label>
+                <input type="text" id="recordTestName" placeholder="Ej: login-flujo-exitoso">
+            </div>
+
+            <div class="form-group">
+                <label for="recordUrl" class="required">URL a Probar</label>
+                <input type="url" id="recordUrl" placeholder="https://mi-app.com/login">
+            </div>
+
+            <div class="form-group">
+                <label for="recordOutputPath">Ruta de guardado</label>
+                <input type="text" id="recordOutputPath" placeholder="tests/proyecto/test.spec.js" readonly style="background-color: #f0f0f0;">
+                <small style="color:#7f8c8d;">El archivo se guardará en esta ubicación</small>
+            </div>
+
+            <div class="storage-info" style="margin: 15px 0;">
+                <i class="fas fa-terminal"></i>
+                <div>
+                    <strong>Cómo grabar:</strong><br>
+                    1. Haz clic en "Generar Comando"<br>
+                    2. Copia el comando que aparece abajo<br>
+                    3. Pégalo en una terminal y presiona Enter<br>
+                    4. Se abrirá Playwright Codegen en tu navegador<br>
+                    5. Interactúa con la página y cierra el navegador al terminar<br>
+                    6. El archivo .spec.js se guardará automáticamente
+                </div>
+            </div>
+
+            <div id="recordCommandBox" style="display:none; margin: 15px 0;">
+                <label>Comando a ejecutar:</label>
+                <div style="background-color: #2c3e50; color: #00ff00; padding: 15px; border-radius: 6px; font-family: monospace; word-break: break-all; margin-top: 5px; position: relative;">
+                    <code id="recordCommandText"></code>
+                    <button type="button" onclick="copyRecordCommand()" style="position: absolute; top: 10px; right: 10px; background: #3498db; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer; font-size: 12px;">
+                        <i class="fas fa-copy"></i> Copiar
+                    </button>
+                </div>
+            </div>
+
+            <div class="button-group">
+                <button type="button" class="btn-success" id="generateCommandBtn"><i class="fas fa-terminal"></i> Generar Comando</button>
+                <button type="button" class="btn-secondary" id="cancelRecordModalBtn"><i class="fas fa-times"></i> Cerrar</button>
+            </div>
         </div>
     </div>
 
@@ -2342,8 +2402,94 @@
             
             document.getElementById('modalSearchTestCases').addEventListener('input', filterModalTestCases);
             document.getElementById('modalSearchSteps').addEventListener('input', filterModalSteps);
+
+            // Setup del modal de grabar test
+            setupRecordTestModal();
         }
-        
+
+        // ==================== GRABAR TEST CASE ====================
+        function setupRecordTestModal() {
+            document.getElementById('recordTestBtn').addEventListener('click', openRecordModal);
+            document.getElementById('generateCommandBtn').addEventListener('click', generateRecordCommand);
+            document.getElementById('recordProject').addEventListener('change', updateRecordOutputPath);
+            document.getElementById('recordTestName').addEventListener('input', updateRecordOutputPath);
+            document.getElementById('closeRecordModalBtn').addEventListener('click', closeRecordModal);
+            document.getElementById('cancelRecordModalBtn').addEventListener('click', closeRecordModal);
+        }
+
+        function openRecordModal() {
+            // Cargar proyectos en el select
+            const select = document.getElementById('recordProject');
+            select.innerHTML = '<option value="">Seleccionar proyecto...</option>' +
+                projects.map(p => `<option value="${p.name}">${p.name}</option>`).join('');
+
+            document.getElementById('recordTestName').value = '';
+            document.getElementById('recordUrl').value = '';
+            document.getElementById('recordOutputPath').value = '';
+            document.getElementById('recordCommandBox').style.display = 'none';
+
+            document.getElementById('recordTestModal').style.display = 'flex';
+        }
+        window.openRecordModal = openRecordModal;
+
+        function closeRecordModal() {
+            document.getElementById('recordTestModal').style.display = 'none';
+        }
+        window.closeRecordModal = closeRecordModal;
+
+        function updateRecordOutputPath() {
+            const project = document.getElementById('recordProject').value;
+            const testName = document.getElementById('recordTestName').value.trim();
+
+            if (project && testName) {
+                const safeName = testName.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+                document.getElementById('recordOutputPath').value = `tests/${project}/${safeName}.spec.js`;
+            } else {
+                document.getElementById('recordOutputPath').value = '';
+            }
+        }
+
+        function generateRecordCommand() {
+            const project = document.getElementById('recordProject').value;
+            const testName = document.getElementById('recordTestName').value.trim();
+            const url = document.getElementById('recordUrl').value.trim();
+
+            if (!project) { showNotification('Selecciona un proyecto', 'warning'); return; }
+            if (!testName) { showNotification('Ingresa el nombre del test', 'warning'); return; }
+            if (!url) { showNotification('Ingresa la URL', 'warning'); return; }
+
+            const safeName = testName.replace(/[^a-zA-Z0-9-_]/g, '-').toLowerCase();
+            const outputPath = `tests/${project}/${safeName}.spec.js`;
+
+            // Asegurar que el directorio exista
+            const mkdirCmd = process.platform === 'win32'
+                ? `if not exist "tests\\${project}" mkdir tests\\${project} &`
+                : `mkdir -p tests/${project} &&`;
+
+            const command = `${mkdirCmd} npx playwright codegen -o ${outputPath} ${url}`;
+
+            document.getElementById('recordCommandText').textContent = command;
+            document.getElementById('recordCommandBox').style.display = 'block';
+            showNotification('Comando generado. Cópialo y ejecútalo en terminal.', 'success');
+        }
+
+        function copyRecordCommand() {
+            const command = document.getElementById('recordCommandText').textContent;
+            navigator.clipboard.writeText(command).then(() => {
+                showNotification('¡Comando copiado al portapapeles!', 'success');
+            }).catch(() => {
+                // Fallback para navegadores antiguos
+                const textarea = document.createElement('textarea');
+                textarea.value = command;
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                showNotification('¡Comando copiado!', 'success');
+            });
+        }
+        window.copyRecordCommand = copyRecordCommand;
+
         function openTestCaseModal() {
             renderModalTestCases();
             renderModalPredefinedSteps();

@@ -9,13 +9,22 @@
  *   node playwright-to-db.js --project=mi-proyecto -> Ejecutar tests de un proyecto
  */
 
+require('dotenv').config();
 const { execSync, spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const axios = require('axios');
+const FormData = require('form-data');
+
+// Módulos compartidos
+const { extractTestData, parseTestResults, processAllResults } = require('./src/test-data-extractor');
+const { formatYouTrackDescription, formatSummary } = require('./src/youtrack-formatter');
+const { saveToDbExport } = require('./src/db-exporter');
 
 const TEST_RESULTS_FILE = './test-results.json';
 const DB_EXPORT_FILE = './test-results-db.json';
 const PROJECTS_CONFIG_FILE = './playwright-projects.json';
+const COUNTER_FILE = './counter.json';
 
 // ==================== HELPERS ====================
 
@@ -56,92 +65,18 @@ function getTestFiles(projectName = null) {
     .map(f => path.join(testDir, f));
 }
 
-function parseTestResults() {
-  if (!fs.existsSync(TEST_RESULTS_FILE)) {
-    console.error('❌ No se encontró test-results.json');
-    return null;
+function getNextCounter() {
+  if (fs.existsSync(COUNTER_FILE)) {
+    const data = JSON.parse(fs.readFileSync(COUNTER_FILE, 'utf8'));
+    return data.current || 100;
   }
-
-  try {
-    return JSON.parse(fs.readFileSync(TEST_RESULTS_FILE, 'utf8'));
-  } catch (e) {
-    console.error('❌ Error al parsear test-results.json:', e.message);
-    return null;
-  }
+  return 100;
 }
 
-function extractTestData(spec, test, result, report) {
-  const passed = result.status === 'passed';
-  const screenshots = result.attachments?.filter(a => a.contentType === 'image/png') || [];
-
-  // Inferir pasos de las acciones del test
-  const pasos = result.steps && result.steps.length > 0
-    ? result.steps.map((s, i) => ({
-        description: `${i + 1}. ${s.title}`,
-        expected: '',
-        data: '',
-        passed: !s.error
-      }))
-    : [{ description: 'Ejecutar secuencia de commands', expected: '', data: '', passed }];
-
-  // Inferir resultado esperado del nombre del test
-  let resEsperado = 'El sistema debe procesar la solicitud sin errores.';
-  const title = spec.title.toLowerCase();
-  if (title.includes('login')) resEsperado = 'Autenticación exitosa y redirección al dashboard.';
-  else if (title.includes('logout')) resEsperado = 'Cierre de sesión y redirección al login.';
-  else if (title.includes('search')) resEsperado = 'Visualización de resultados relevantes.';
-  else if (title.includes('create')) resEsperado = 'Creación exitosa del registro.';
-  else if (title.includes('delete')) resEsperado = 'Eliminación exitosa del registro.';
-  else if (title.includes('update') || title.includes('edit')) resEsperado = 'Actualización correcta de datos.';
-
-  // Resultado obtenido
-  let resObtenido = '';
-  if (passed) {
-    resObtenido = `Flujo completado. ${result.steps?.length || 0} validaciones exitosas.`;
-  } else {
-    const errorStep = result.steps?.find(s => s.error);
-    resObtenido = `Fallo: ${errorStep?.title || 'Error desconocido'}. ${result.error?.message?.split('\n')[0] || ''}`;
-  }
-
-  // Determinar categoría
-  let category = 'Bug (fallo)';
-  if (passed) category = 'Test Case (caso de éxito)';
-
-  return {
-    id: `CP-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-    title: spec.title,
-    category,
-    frequency: 'Siempre',
-    status: passed ? 'Cerrado' : 'Nuevo',
-    followUp: !passed,
-    followUpDate: null,
-    steps: pasos,
-    expectedResults: resEsperado,
-    actualResult: resObtenido,
-    notes: `Ejecutado: ${new Date().toISOString()}. Duración: ${result.duration}ms.`,
-    version: report.config?.version || 'N/A',
-    os: process.platform,
-    browser: 'Desktop Chrome',
-    env: 'Testing',
-    resolution: '',
-    device: '',
-    build: '',
-    images: screenshots.map(s => s.path),
-    projectId: null,
-    projectName: null,
-    createdDate: new Date().toISOString(),
-    executedFrom: 'Playwright',
-    testFile: spec.location?.file || ''
-  };
-}
-
-function saveToDbExport(results) {
-  const dbData = {
-    lastUpdated: new Date().toISOString(),
-    results
-  };
-  fs.writeFileSync(DB_EXPORT_FILE, JSON.stringify(dbData, null, 2));
-  console.log(`📁 Resultados exportados a ${DB_EXPORT_FILE}`);
+function incrementCounter() {
+  const current = getNextCounter();
+  fs.writeFileSync(COUNTER_FILE, JSON.stringify({ current: current + 1 }));
+  return current;
 }
 
 // ==================== EJECUCIÓN DE TESTS ====================
@@ -185,31 +120,26 @@ function runPlaywrightTests(testFiles = [], options = {}) {
 // ==================== PROCESAMIENTO Y GUARDADO ====================
 
 function processAndSaveResults(projectName = null, projectId = null) {
-  const report = parseTestResults();
+  const report = parseTestResults(TEST_RESULTS_FILE);
   if (!report) return [];
 
-  const allResults = [];
-  const config = loadProjectsConfig();
+  const options = {
+    projectName,
+    projectId,
+    executedFrom: 'playwright-to-db.js'
+  };
 
-  for (const suite of report.suites) {
-    for (const spec of suite.specs) {
-      for (const test of spec.tests) {
-        const result = test.results[0];
-        const testData = extractTestData(spec, test, result, report);
+  const allResults = processAllResults(report, options);
 
-        // Asignar al proyecto si se especifica
-        if (projectName) {
-          testData.projectName = projectName;
-          testData.projectId = projectId;
-        }
-
-        allResults.push(testData);
-      }
-    }
-  }
+  // Asignar IDs secuenciales usando el contador
+  const startCounter = getNextCounter();
+  allResults.forEach((test, index) => {
+    test.id = `CP-${startCounter + index}`;
+  });
+  incrementCounter(allResults.length);
 
   // Guardar en archivo de exportación (gestor.html puede importar esto)
-  saveToDbExport(allResults);
+  saveToDbExport(allResults, 'playwright-to-db.js', DB_EXPORT_FILE);
 
   return allResults;
 }
@@ -224,39 +154,17 @@ async function syncToYouTrack(results) {
     return;
   }
 
-  const axios = require('axios');
-  const FormData = require('form-data');
-  const counterFile = './counter.json';
-  let counterData = fs.existsSync(counterFile) ? JSON.parse(fs.readFileSync(counterFile, 'utf8')) : { current: 100 };
-  let counter = counterData.current;
+  const PROJECT_ID = '0-0';
 
   for (const test of results) {
     try {
-      const descripcion = `
-**${test.id} : ${test.title}**
-
-**Categoría:** ${test.category}
-**Estado:** ${test.status}
-**Entorno:** ${test.env} | ${test.browser} | ${test.os}
-
-**Pasos de Ejecución:**
-${test.steps.map((s, i) => `${i + 1}. [${s.passed ? '✅' : '❌'}] ${s.description}`).join('\n')}
-
-**Resultado Esperado:**
-${test.expectedResults}
-
-**Resultado Obtenido:**
-${test.actualResult}
-
-**Notas:**
-${test.notes}
-
----
-*Generado automáticamente por Playwright + MCP Testing*
-      `;
+      const descripcion = formatYouTrackDescription(test, {
+        platform: test.os,
+        browserVersion: test.version
+      });
 
       const issueRes = await axios.post(`${YOUTRACK_BASE_URL}/api/issues`, {
-        project: { id: '0-0' },
+        project: { id: PROJECT_ID },
         summary: `${test.id} : ${test.title}`,
         description: descripcion
       }, {
@@ -275,14 +183,10 @@ ${test.notes}
           });
         }
       }
-
-      counter++;
     } catch (err) {
       console.error(`❌ Error sincronizando ${test.id}:`, err.response?.data?.error_description || err.message);
     }
   }
-
-  fs.writeFileSync(counterFile, JSON.stringify({ current: counter }));
 }
 
 // ==================== GESTIÓN DE PROYECTOS DE TESTS ====================
@@ -409,9 +313,8 @@ async function main() {
       console.log(`\n✅ ${results.length} resultado(s) procesado(s)`);
 
       if (results.length > 0) {
-        const passed = results.filter(r => r.status === 'Cerrado').length;
-        const failed = results.filter(r => r.status === 'Nuevo').length;
-        console.log(`   📗 Pasados: ${passed}  |  📕 Fallidos: ${failed}`);
+        const summary = formatSummary(results);
+        console.log(`   📗 Pasados: ${summary.passed}  |  📕 Fallidos: ${summary.failed}  |  📈 Tasa de éxito: ${summary.passRate}%`);
 
         // Sincronizar con YouTrack
         await syncToYouTrack(results);
@@ -434,7 +337,7 @@ async function main() {
     try {
       const data = JSON.parse(fs.readFileSync(path.join(__dirname, file), 'utf8'));
       const results = Array.isArray(data) ? data : data.results || [];
-      saveToDbExport(results);
+      saveToDbExport(results, 'playwright-to-db.js (import)', DB_EXPORT_FILE);
       console.log(`✅ Importados ${results.length} resultados`);
     } catch (err) {
       console.error('❌ Error importando:', err.message);
